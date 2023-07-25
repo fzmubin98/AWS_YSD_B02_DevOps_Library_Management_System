@@ -1,0 +1,65 @@
+pipeline {
+    agent any
+    
+    triggers {
+        pollSCM('H/2 * * * *') // Polls the SCM every 2 minutes
+    }
+    environment {
+        RDS_ENDPOINT = 'team-kernull-rds.cjldgoxvvwoc.us-west-2.rds.amazonaws.com'
+        ip_address = '35.82.225.172'
+        ip_address2 = '34.217.191.242'
+    }
+
+    stages {
+        stage('SCM') {
+            steps {
+               git branch: 'main', credentialsId: 'fazle-jenkins-github', url: 'git@github.com:fazle-mubin-bjit/AWS_YSD_B02_DevOps_Library_Management_System.git'
+            }
+        }
+        stage('Project Build') {
+            steps {
+                script {
+                    sh 'chmod +x mvnw'
+                    sh './mvnw clean install'
+                }
+            }
+        }
+         stage('deploy project') {
+            steps {
+                script {
+                    withCredentials([sshUserPrivateKey(credentialsId:'fazle-EC2', keyFileVariable: 'SSH_KEY')]) {
+                        def sourceFilePath = '/var/lib/jenkins/workspace/AWS-Deployment/target/spark-lms-0.0.1-SNAPSHOT.jar'
+                        def destinationPath = '/home/ec2-user/'
+                        
+                        //main
+                         def ssh = "ssh -o StrictHostKeyChecking=no -i $SSH_KEY ec2-user@${ip_address}"
+                         sh ssh
+                         
+                          def scp = "scp -i $SSH_KEY ${sourceFilePath} ec2-user@${ip_address}:${destinationPath}"
+                          sh scp
+                         
+                         //&> /dev/null
+                        def sshCmd = "ssh -i $SSH_KEY ec2-user@${ip_address} 'pkill java || true'"
+                        sh sshCmd
+                        def sshCommand = "ssh -i $SSH_KEY ec2-user@${ip_address} 'java -jar /home/ec2-user/spark-lms-0.0.1-SNAPSHOT.jar &> /dev/null &'"
+                        sh sshCommand
+                        
+                        //instance ASG
+                         def ssh2 = "ssh -o StrictHostKeyChecking=no -i $SSH_KEY ec2-user@${ip_address2}"
+                         sh ssh2
+                         
+                          def scp2 = "scp -i $SSH_KEY ${sourceFilePath} ec2-user@${ip_address2}:${destinationPath}"
+                          sh scp2
+                         
+                         //&> /dev/null
+                        def sshCmd2 = "ssh -i $SSH_KEY ec2-user@${ip_address2} 'pkill java || true'"
+                        sh sshCmd2
+                        def sshCommand2 = "ssh -i $SSH_KEY ec2-user@${ip_address2} 'java -jar /home/ec2-user/spark-lms-0.0.1-SNAPSHOT.jar &> /dev/null &'"
+                        sh sshCommand2
+                      
+                    }
+                }
+            }
+        }
+    }
+}
